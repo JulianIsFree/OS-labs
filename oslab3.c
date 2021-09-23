@@ -10,7 +10,7 @@
 #define LAB_FAIL 1
 
 typedef struct _lparam {
-    char *str;
+    char **str;
     int count;
 } lparam;
 
@@ -18,10 +18,10 @@ void * run(void * param) {
     if (param == NULL)
         return param;
     lparam *p = (lparam*)param;
-    char *str = p->str;
+    char **str = p->str;
     int i;
     for (i=0; i<p->count; i++) 
-        printf("%d %s\n", i + 1, str);
+        printf("%d %s\n", i + 1, str[i]);
 	return param;
 }
 
@@ -36,13 +36,13 @@ void run_child_thread(lparam *child) {
 
     int code = pthread_attr_init(&attr);
     if (code == ENOMEM) {
-        print_error(code, thread, "can't init attr");
+        print_error(code, thread, child->str);
         exit(LAB_FAIL);
     }
 
     code = pthread_create(&thread, &attr, run, child);
     if  (code != LAB_THREAD_CREATE_SUCCESS) {
-        print_error(code, thread, "can't create thread");
+        print_error(code, thread, child->str);
         exit(LAB_FAIL);
     }
 
@@ -50,10 +50,10 @@ void run_child_thread(lparam *child) {
 }
 
 int main(int argc, char *argv[]) {
-    static lparam parent = {"I gave a birth!", 10};
-    static lparam child1 = {"I'm eldest!", 10};
-    static lparam child2 = {"I'm middle!", 10};
-    static lparam child3 = {"I'm youngest!", 10};
+    static lparam parent = {{"I gave a birth!", "3 children"}, 2};
+    static lparam child1 = {{"I'm eldest!", "Second and Third are younger"}, 2};
+    static lparam child2 = {{"I'm middle!", "Third is younger"}, 2};
+    static lparam child3 = {{"I'm youngest!"}, 1};
     run_child_thread(&child1);
     run_child_thread(&child2);
     run_child_thread(&child3);
