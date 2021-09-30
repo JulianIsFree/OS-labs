@@ -6,6 +6,9 @@
 
 #define LAB_NO_ERROR 0
 #define LAB_SOME_ERROR 1
+#define LAB_CANT_CREATE_THREADS 2
+#define LAB_THREAD_NOT_STARTED 3
+#define LAB_CANT_WAIT_FOR_THREADS 4
 
 // typedef unsigned int pthread_t;
 // int pthread_create(pthread_t *thr, void * p,  void *(*start_routine)(void*), void * arg);\
@@ -86,17 +89,54 @@ void * run(void * param) {
 	return param;
 }
 
-void printError(int code, pthread_t thread, int num, char * what) {
-    fprintf(stderr, "Error with thr %lu, num in list %d\n %s; %s\n", thread, num, what, strerror(code));
+void printError(int code, pthread_t thread, char * what) {
+    fprintf(stderr, "Error with thr %lu\n %s; %s\n", thread, what, strerror(code));
 }
 
-int runThreads(threadLabNode *list) {
-    threadLabNode *curr = list;
+runParams makeStringArrayOfNumbers(char startchar, int n) {
+    char ** arr = malloc(sizeof(char*) * n);
+
+    for (int i = 0; i < n; ++i) {
+        arr[i] = malloc(sizeof(char) * i + 1);
+        
+        for (int j = 0; j < i; ++j) {
+            arr[i][j] = startchar + (j % 256);
+        }
+        arr[i][i] = '\0';
+    }
+
+    runParams params;
+    params.count = n;
+    params.strings = arr;
+
+    return params;
+}
+
+threadLabNode * createThreadsByNumber(int n, int *arr) {
+    threadLabNode * head = NULL;
+
+    for (int i = 0; i < n; ++i) {
+        runParams params = makeStringArrayOfNumbers('a' + (char)i, arr[i]);
+        threadLabNode * node = createNode(params);
+        addFirst(&head, node);
+    }
+
+    return head;
+}
+
+threadLabNode * runThreads(threadLabNode *list) {
+    threadLabNode *curr = list; 
+
     while (curr != NULL) {
         int code = pthread_create(&(curr->thread), NULL, run, curr);
         curr->status = code;
+        if (code != LAB_NO_ERROR) {
+            return curr;
+        }
         curr = curr->next;
     }
+
+    return NULL;
 }
 
 void freeLabNode(threadLabNode* node) {
@@ -104,42 +144,69 @@ void freeLabNode(threadLabNode* node) {
     free(node);
 }
 
-void printErrors(threadLabNode *list) {
-    threadLabNode *curr = list;
-    int count = 0;
+/**
+ * Assumes that threads are joinable and are running or already are finished execution
+ */
+threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads) {
+    threadLabNode *curr = runningJoinableThreads;
 
     while (curr != NULL) {
         int status = curr->status;
-
         if (status != LAB_NO_ERROR) {
-            printError(status, curr->thread, count, "error on creating thread, no handle");
-        } else {
             threadLabNode * ret = NULL;
-            int code = pthread_join(curr->thread, (void**)(&ret));    
-            if (code != LAB_NO_ERROR) {
-                printError(code, curr->thread, count, "");
+            int code = pthread_join(curr->thread, (void**)(&ret));
+            curr->status = code;
+
+            if (code == LAB_NO_ERROR) {
+                /*No errors, it's just fine as ESRCH*/
+            } else if (code == ESRCH) {
+                /*It's fine if thread is already finished or doesn't exist at all*/
+            } else if (code == EINVAL || code == EDEADLK) {
+                return curr;
             }
         }
-        
         curr = curr->next;
-        count ++;
     }
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
     // no static
     // make code scalable
     // run_child_thread must return code errors, with semantic and handling
+    
+    // + auto thread creation
 
     threadLabNode * head = NULL;
-    addFirst(&head, createNode(makeStringArray(3, "Boys", "are", "stronger")));
-    addFirst(&head, createNode(makeStringArray(4, "Girls", "are", "more", "beautiful")));
-    addFirst(&head, createNode(makeStringArray(2, "I'm", "young")));
-    addFirst(&head, createNode(makeStringArray(3, "Olds", "are", "older")));
+    if (argc == 1) {
+        addFirst(&head, createNode(makeStringArray(3, "Boys", "are", "stronger")));
+        addFirst(&head, createNode(makeStringArray(4, "Girls", "are", "more", "beautiful")));
+        addFirst(&head, createNode(makeStringArray(2, "I'm", "young")));
+        addFirst(&head, createNode(makeStringArray(3, "Olds", "are", "older")));
+    } else {
+        int n = atoi(argv[1]); 
+        int * arr = malloc(sizeof(int) * n);
+        for (int i = 0; i < n; ++i) 
+            arr[i] = atoi(argv[2 + i]);
+        head = createThreadsByNumber(n, arr);
+        free(arr);
+    }
+    
+    threadLabNode * problem = runThreads(head);
+    if (problem != NULL) {
+        printError(problem->status, problem->thread, "thread creation problem, calling exit");
+        freeList(head);
+        exit(LAB_CANT_CREATE_THREADS);
+    } 
 
-    runThreads(head);
-    printErrors(head);
+    problem = waitUntilAllThreadsFinish(head);
+    if (problem != NULL) {
+        printError(problem->status, problem->thread, "couldn't wait for this thread due to some error");    
+        freeList(head);
+        exit(LAB_CANT_WAIT_FOR_THREADS);
+    }
+
     freeList(head);
-
     pthread_exit(LAB_NO_ERROR);  
 }

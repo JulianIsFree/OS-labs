@@ -95,6 +95,7 @@ void freeLabNode(threadLabNode* node) {
     free(node);
 }
 
+threadLabNode *list = NULL;
 void catchReturnAndPrintErrorsAndFreeList(threadLabNode *list) {
     threadLabNode *curr = list;
     int count = 0;
