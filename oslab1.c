@@ -12,12 +12,12 @@
 typedef struct _lparam {
     char *str;
     int count;
-} param;
+} lparam;
 
 void * run(void * param) {
     if (param == NULL)
         return param;
-    param *p = (param*)param;
+    lparam *p = (lparam*)param;
     char *str = p->str;
     int i;
     for (i=0; i<p->count; i++) 
@@ -37,8 +37,8 @@ int main(int argc, char *argv[]) {
 
     pthread_t thread;
     pthread_attr_t attr;
-    static param child = {"I was  born!", 10};
-    static param parent = {"I gave a birth!", 10};
+    static lparam child = {"I was  born!", 10};
+    static lparam parent = {"I gave a birth!", 10};
 
     // By calling this we allocate memory for thrattr_t *ap, which is stored in attr->__pthread_attrp,  
     // and has value of *def_thrattr().

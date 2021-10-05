@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define LAB_SUCCESS ((void*)0)
 #define LAB_BAD_PARAM ((void*)1)
@@ -23,6 +25,26 @@ void * run(void * param) {
 void print_error(int code, pthread_t thread, char * what) {
     fprintf(stderr, "Error: %lu %s: %s\n", thread, what, strerror(code));
 }
+
+// ? handling
+// ? join to detached
+// ? multi join
+// ? what is zombie and what stored
+/*
+What is freed:
+    in structure ulwp_t for this thread there is a uberdata structure, in which there are several things:
+        tmem list
+        thread specific data list 
+        thread local storage 
+        heldlock list
+        :: all of these are deallocated (except heldlock list, for they owner is set as LOCK_OWNERDEAD)
+    ulwp_t->ul_readlock.array is freed with lfree (rwl_free(ulwp_t*));
+    ulwp_t structure after this is moved either in free stack list or free ulwp_t list (ulwp_free(ulwp_t*) function)
+
+Zombie thread is a thread which already called pthread_exit but which rval were not gained by any other thread
+Trying to join to detached will result in EINVAL
+Multi join will result in situation, where one thread obtains result, and others receives ESRCH
+*/
 
 int main(int argc, char *argv[]) {
     pthread_t thread;
@@ -49,35 +71,15 @@ int main(int argc, char *argv[]) {
     if (code == EINVAL) {
         print_error(code, thread, "target thread is detached");
         pthread_exit(LAB_FAIL);
-    } 
+    }
     if (code == ESRCH) {
         print_error(code, thread, "someone stole your sweet role");
         pthread_exit(LAB_FAIL);
     }
-    // ? handling
-    // ? join to detached
-    // ? multi join
-    // ? what is zombie and what stored
     if (status == LAB_BAD_PARAM) {
         print_error(code, thread, "bad params for joined thread");
         pthread_exit(LAB_FAIL);
-    } 
-    /*
-    What is freed:
-        in structure ulwp_t for this thread there is a uberdata structure, in which there are several things:
-            tmem list
-            thread specific data list 
-            thread local storage 
-            heldlock list
-            :: all of these are deallocated (except heldlock list, for they owner is set as LOCK_OWNERDEAD)
-        ulwp_t->ul_readlock.array is freed with lfree (rwl_free(ulwp_t*));
-        ulwp_t structure after this is moved either in free stack list or free ulwp_t list (ulwp_free(ulwp_t*) function)
-
-    Zombie thread is a thread which already called pthread_exit but which rval were not gained by any other thread
-    Trying to join to detached will result in EINVAL
-    Multi join will result in situation, where one thread obtains result, and others receives ESRCH
-    */
-
+    }
     if (status != LAB_SUCCESS) {
         fprintf(stderr, "Unknown status: %d", status);
     }
