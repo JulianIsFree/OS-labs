@@ -14,7 +14,7 @@
 
 #define LAB_ITERATION_NUMBER 100000000
 
-#define LAB_DEBUG
+// #define LAB_DEBUG
 
 // typedef unsigned int pthread_t;
 // int pthread_create(pthread_t *thr, void * p,  void *(*start_routine)(void*), void * arg);\
@@ -22,8 +22,8 @@
 // void pthread_exit(void *value_ptr);
 
 typedef struct _threadRunParams {
-    int startIndex;
-    int count;
+    unsigned int startIndex;
+    unsigned int count;
     int iterationsNumber;
     double result;
 } runParams;
@@ -41,8 +41,8 @@ threadLabNode constructNode(runParams p) {
     return node;    
 }
 
-double f(int i) {
-    return ((i % 2 == 0) ? 1.0 : -1.0) / (2*i + 1);
+double f(unsigned int i) {
+    return ((i % 2 == 0) ? 1.0 : -1.0) / (2*(double)i + 1.0);
 }
 
 void * run(void * param) {
@@ -53,13 +53,13 @@ void * run(void * param) {
     runParams p = tn->params;
     
     double res = 0;
-    int x = p.startIndex;
+    unsigned int x = p.startIndex;
     for (int i = 0; i < p.iterationsNumber; ++i) {
         res += f(x);
         x += p.count;
     }
 #ifdef LAB_DEBUG
-    printf("%d %lf\n", p.startIndex, 4 * res);
+    printf("%d %.15g\n", p.startIndex, 4 * res);
 #endif
     tn->params.result = res;
     return param;
@@ -121,7 +121,7 @@ double collectResults(threadLabNode *finishedThreads, int n) {
 
 void initThreads(threadLabNode *threads, int n, int iterations) {
     for (int i = 0; i < n; ++i) {
-        runParams params = {i, n, iterations, 0.0};
+        runParams params = {(unsigned int)i, (unsigned int)n, iterations, 0.0};
         threads[i] = constructNode(params);
     }
 }
@@ -159,8 +159,8 @@ int main(int argc, char *argv[]) {
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
-    double pi = 4 * collectResults(threads, n);
-    printf("pi=%lf\n", pi);
+    double pi = 4.0 * collectResults(threads, n);
+    printf("pi=%.15g\n", pi);
 
     pthread_exit(LAB_NO_ERROR);  
 }
