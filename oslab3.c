@@ -1,21 +1,22 @@
 #include <stdio.h>
 #include <errno.h>
-// #include <pthread.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define LAB_NO_ERROR 0
 #define LAB_SOME_ERROR 1
-
 #define LAB_CANT_CREATE_THREADS 2
 #define LAB_THREAD_NOT_STARTED 3
 #define LAB_CANT_WAIT_FOR_THREADS 4
 #define LAB_BAD_ARGS 5
+#define LAB_BAD_ALLOC 6
 
-typedef unsigned int pthread_t;
-int pthread_create(pthread_t *thr, void * p,  void *(*start_routine)(void*), void * arg);\
-int pthread_join(pthread_t thread, void **status);
-void pthread_exit(void *value_ptr);
+// typedef unsigned int pthread_t;
+// int pthread_create(pthread_t *thr, void * p,  void *(*start_routine)(void*), void * arg);\
+// int pthread_join(pthread_t thread, void **status);
+// void pthread_exit(void *value_ptr);
+//  pthread_t pthread_self(void);
 
 typedef struct _threadRunParams {
     char **strings;
@@ -49,21 +50,6 @@ void freeParams(runParams param) {
     free(arr);
 }
 
-runParams makeStringArray(int n, ...) {
-    char * p = (char*)&n;
-    char ** arr = malloc(sizeof(char*) * n);
-
-    p += sizeof(char*);
-    for (int i = 0; i < n; ++i) {
-        char * str = *((char**)p);
-        arr[i] = strcpy(malloc(strlen(str)), str);
-        p += sizeof(char*);
-    }
-
-    runParams par = {arr, n};
-    return par;
-}
-
 void * run(void * param) {
     if (param == NULL)
         return param;
@@ -88,22 +74,30 @@ runParams makeStringArrayOfLength(int n) {
         char * str = strerror((i % 10) + 1);
         int len = strlen(str);
         arr[i] = malloc(sizeof(char) * len + 1);
-        // strcpy(arr[i], str);
+
+        if (arr[i] == NULL) 
+            return (runParams){NULL, 0};
+
         memcpy(arr[i], str, sizeof(char) * len);
         arr[i][len] = '\0';
     }
 
     runParams params;
-    params.count = n;
     params.strings = arr;
+    params.count = n;
     return params;
 }
 
-void initThreads(threadLabNode *threads, int n, int *arr) {
+int initThreads(threadLabNode *threads, int n, int *arr) {
     for (int i = 0; i < n; ++i) {
         runParams params = makeStringArrayOfLength(arr[i]);
+        if (params.strings == NULL && arr[i] != 0) 
+            return i + 1;
+        
         threads[i] = constructNode(params);
     }
+
+    return LAB_NO_ERROR;
 }
 
 threadLabNode* runThreads(threadLabNode *list, int n) {
@@ -111,9 +105,8 @@ threadLabNode* runThreads(threadLabNode *list, int n) {
         threadLabNode *curr = &(list[i]);
         int code = pthread_create(&(curr->thread), NULL, run, curr);
         curr->status = code;
-        if (code != LAB_NO_ERROR) {
+        if (code != LAB_NO_ERROR)
             return curr;
-        }
     }
 
     return NULL;
@@ -177,7 +170,12 @@ int main(int argc, char *argv[]) {
     fillArray(arr, n,  argv + 2);
 
     threadLabNode threads[n];
-    initThreads(threads, n, arr);
+    int index;
+    if ((index = initThreads(threads, n, arr)) != LAB_NO_ERROR) {
+        printError(errno, pthread_self(), "can't allocate memory for strings for threads");
+        freeThreads(threads, index - 1);
+        exit(LAB_BAD_ALLOC);
+    }
     
     threadLabNode * problem = runThreads(threads, n);
     if (problem != NULL) {
