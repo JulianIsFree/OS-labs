@@ -49,6 +49,10 @@ double f(unsigned int  i) {
 
 static int doRun = 1;
 
+/**
+ * this function should not be called from anywhere except signal handler
+ * since it affects work of different threads
+ */
 void sigcatch(int sig) {
     doRun = 0;
 }
@@ -154,7 +158,11 @@ int main(int argc, char *argv[]) {
 
     struct sigaction act;
     act.sa_handler = sigcatch;    
-    sigaction(SIGINT, &act, NULL);
+    //https://illumos.org/man/2/sigaction
+    if (sigaction(SIGINT, &act, NULL) == EINVAL) {
+        printError(EINVAL, pthread_self(), "can't set signal SIGINT for main thread");
+        exit(LAB_SOME_ERROR);
+    }
     
     threadLabNode threads[n];
     initThreads(threads, n, iterations);
