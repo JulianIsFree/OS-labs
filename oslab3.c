@@ -135,16 +135,22 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
         if (status == LAB_NO_ERROR) {
             threadLabNode * ret = NULL;
             int code = pthread_join(curr->thread, (void**)(&ret));
-            // ?
             curr->status = code;
 
             if (code == LAB_NO_ERROR) {
                 /*No errors, it's just fine as ESRCH*/
-            } else if (code == ESRCH) {
+            } 
+            #ifdef LAB_ALLOW_MN_JOIN // whatever it's allowed for n threads to wait for same m threads or not
+            else if (code == ESRCH) {
                 /*It's fine if thread is already finished or doesn't exist at all*/
             } else if (code == EINVAL || code == EDEADLK) {
                 return curr;
             }
+            #else 
+            else {
+                return curr;
+            }
+            #endif
         } else {
             /*Means thread wasn't started or already was in this *good* branch*/
         }
