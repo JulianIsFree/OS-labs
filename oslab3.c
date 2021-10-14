@@ -69,7 +69,10 @@ void printError(int code, pthread_t thread, char * what) {
 
 runParams makeStringArrayOfLength(int n) {
     char ** arr = malloc(sizeof(char*) * n);
-    
+    if (arr == null) {
+        return (runParams) {NULL, 0};
+    }
+
     for (int i = 0; i < n; ++i) {
         char * str = strerror((i % 10) + 1);
         int len = strlen(str);
@@ -117,6 +120,7 @@ void freeThreads(threadLabNode *arr, int n) {
         freeParams(arr[i].params);
     }
 }
+
 /**
  * Assumes that threads are joinable and are running or already finished execution
  */
@@ -127,6 +131,7 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
         if (status == LAB_NO_ERROR) {
             threadLabNode * ret = NULL;
             int code = pthread_join(curr->thread, (void**)(&ret));
+            // ?
             curr->status = code;
 
             if (code == LAB_NO_ERROR) {
