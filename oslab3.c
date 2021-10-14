@@ -57,9 +57,14 @@ void * run(void * param) {
     threadLabNode * tn = (threadLabNode*)param;
     runParams p = tn->params;
 
-    for (int i = 0; i < p.count; ++i) 
+    for (int i = 0; i < p.count; ++i) {
         printf("%d %d %s\n",tn->thread, i, p.strings[i]);
-
+        if (errno != LAB_NO_ERROR) {
+            printError(errno, pthread_self(), "");
+            break;
+        }
+    } 
+        
 	return param;
 }
 
@@ -69,9 +74,8 @@ void printError(int code, pthread_t thread, char * what) {
 
 runParams makeStringArrayOfLength(int n) {
     char ** arr = malloc(sizeof(char*) * n);
-    if (arr == null) {
+    if (arr == null)
         return (runParams) {NULL, 0};
-    }
 
     for (int i = 0; i < n; ++i) {
         char * str = strerror((i % 10) + 1);
