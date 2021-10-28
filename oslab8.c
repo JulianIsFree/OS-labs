@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #define LAB_NO_ERROR 0
 #define LAB_SOME_ERROR 1
@@ -11,6 +12,7 @@
 #define LAB_THREAD_NOT_STARTED 3
 #define LAB_CANT_WAIT_FOR_THREADS 4
 #define LAB_BAD_ARGS 5
+#define LAB_BAD_ALLOC 6
 
 #define LAB_ITERATION_NUMBER 100000000
 
@@ -22,9 +24,9 @@
 // void pthread_exit(void *value_ptr);
 
 typedef struct _threadRunParams {
-    unsigned int startIndex;
-    unsigned int count;
-    int iterationsNumber;
+    unsigned long startIndex;
+    unsigned long count;
+    long iterationsNumber;
     double result;
 } runParams;
 typedef struct _threadLabNode threadLabNode;
@@ -41,7 +43,10 @@ threadLabNode constructNode(runParams p) {
     return node;    
 }
 
-double f(unsigned int i) {
+// look for spec for double
+// why there is difference
+//? name
+double f(unsigned long i) {
     return ((i % 2 == 0) ? 1.0 : -1.0) / (2*(double)i + 1.0);
 }
 
@@ -53,8 +58,9 @@ void * run(void * param) {
     runParams p = tn->params;
     
     double res = 0;
-    unsigned int x = p.startIndex;
-    for (int i = 0; i < p.iterationsNumber; ++i) {
+    unsigned long x = p.startIndex;
+    
+    for (long i = 0; i < p.iterationsNumber; ++i) {
         res += f(x);
         x += p.count;
     }
@@ -66,12 +72,13 @@ void * run(void * param) {
 }
 
 void printError(int code, pthread_t thread, char * what) {
-    fprintf(stderr, "Error with thr %lu\n %s; %s\n", thread, what, strerror(code));
+    fprintf(stderr, "Error with thr %lu\n%s; %s\n", thread, what, strerror(code));
 }
 
-threadLabNode* runThreads(threadLabNode *list, int n) {
-    for (int i = 0; i < n; ++i) {
+threadLabNode* runThreads(threadLabNode *list, long n) {
+    for (long i = 0; i < n; ++i) {
         threadLabNode *curr = &(list[i]);
+        // Segmentation fault due to pthread_t overload
         int code = pthread_create(&(curr->thread), NULL, run, curr);
         curr->status = code;
         if (code != LAB_NO_ERROR) {
@@ -85,8 +92,8 @@ threadLabNode* runThreads(threadLabNode *list, int n) {
 /**
  * Assumes that threads are joinable and are running or already finished execution
  */
-threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, int n) {
-    for (int i = 0; i < n; ++i) {
+threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, long n) {
+    for (long i = 0; i < n; ++i) {
         threadLabNode *curr = &(runningJoinableThreads[i]);
         int status = curr->status;
         if (status == LAB_NO_ERROR) {
@@ -96,9 +103,7 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
 
             if (code == LAB_NO_ERROR) {
                 /*No errors, it's just fine as ESRCH*/
-            } else if (code == ESRCH) {
-                /*It's fine if thread is already finished or doesn't exist at all*/
-            } else if (code == EINVAL || code == EDEADLK) {
+            } else {
                 return curr;
             }
         } else {
@@ -109,42 +114,54 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
     return NULL;
 }
 
-double collectResults(threadLabNode *finishedThreads, int n) {
+double collectResults(threadLabNode *finishedThreads, long n) {
     double res = 0;
 
-    for (int i = 0; i < n; ++i) {
+    for (long i = 0; i < n; ++i) {
         res += finishedThreads[i].params.result;
     }
 
     return res;
 }
 
-void initThreads(threadLabNode *threads, int n, int iterations) {
-    for (int i = 0; i < n; ++i) {
-        runParams params = {(unsigned int)i, (unsigned int)n, iterations, 0.0};
+void initThreads(threadLabNode *threads, long n, long iterations) {
+    for (long i = 0; i < n; ++i) {
+        runParams params = {(unsigned long)i, (unsigned long)n, iterations, 0.0};
         threads[i] = constructNode(params);
     }
 }
 
-int main(int argc, char *argv[]) {
-    // no static
-    // make code scalable
-    // run_child_thread must return code errors, with semantic and handling
-    int n;
-    int iterations;
-    
+void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) {
     if (argc >= 2) {
-        n = atoi(argv[1]);
-        if (argc >= 3)
-            iterations = atoi(argv[2]);
-        else 
-            iterations = LAB_ITERATION_NUMBER;
+        *n = strtol(argv[1], (char **)NULL, 10);
+
+        if (errno) {
+            printError(errno, pthread_self(), "can't read number of threads");
+            exit(LAB_BAD_ARGS);
+        }
+
+        if (argc >= 3) {
+            *iterations = strtol(argv[2], (char **)NULL, 10);
+            if (errno) {
+                printError(errno, pthread_self(), "can't read number of iterations");
+                exit(LAB_BAD_ARGS);
+            }
+        } else {
+            *iterations = LAB_ITERATION_NUMBER;
+        } 
     } else {
         printf("args: threadsNumber [ iterationsNumber ]\n");
         exit(LAB_BAD_ARGS);
     }
+}
 
-    threadLabNode threads[n];
+double runMultiThreadCalculations(long n, long iterations) {
+    threadLabNode *threads = malloc(sizeof(threadLabNode) * n);
+    if (threads == NULL) {
+        printError(ENOMEM, pthread_self(), "threads number is too big");
+        exit(LAB_CANT_CREATE_THREADS);
+    }
+    
     initThreads(threads, n, iterations);
     
     threadLabNode * problem = runThreads(threads, n);
@@ -159,8 +176,18 @@ int main(int argc, char *argv[]) {
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
+    free(threads);
     double pi = 4.0 * collectResults(threads, n);
+    return pi;
+}
+
+int main(int argc, char *argv[]) {
+    long n;
+    long iterations;
+    initAndMayBeDie(argc, argv, &n, &iterations);
+    
+    double pi = runMultiThreadCalculations(n, iterations);    
     printf("pi=%.15g\n", pi);
 
-    pthread_exit(LAB_NO_ERROR);  
+    exit(LAB_NO_ERROR);
 }
