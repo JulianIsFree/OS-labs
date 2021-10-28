@@ -43,10 +43,7 @@ threadLabNode constructNode(runParams p) {
     return node;    
 }
 
-// look for spec for double
-// why there is difference
-//? name
-double f(unsigned long i) {
+double LeibnizPi(unsigned long i) {
     return ((i % 2 == 0) ? 1.0 : -1.0) / (2*(double)i + 1.0);
 }
 
@@ -61,7 +58,7 @@ void * run(void * param) {
     unsigned long x = p.startIndex;
     
     for (long i = 0; i < p.iterationsNumber; ++i) {
-        res += f(x);
+        res += LeibnizPi(x);
         x += p.count;
     }
 #ifdef LAB_DEBUG
@@ -78,7 +75,6 @@ void printError(int code, pthread_t thread, char * what) {
 threadLabNode* runThreads(threadLabNode *list, long n) {
     for (long i = 0; i < n; ++i) {
         threadLabNode *curr = &(list[i]);
-        // Segmentation fault due to pthread_t overload
         int code = pthread_create(&(curr->thread), NULL, run, curr);
         curr->status = code;
         if (code != LAB_NO_ERROR) {
@@ -116,11 +112,9 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
 
 double collectResults(threadLabNode *finishedThreads, long n) {
     double res = 0;
-
     for (long i = 0; i < n; ++i) {
         res += finishedThreads[i].params.result;
     }
-
     return res;
 }
 
@@ -131,12 +125,27 @@ void initThreads(threadLabNode *threads, long n, long iterations) {
     }
 }
 
+int isCorrect(long v, char * rep) {
+    char ns[64];
+    sprintf(ns, "%ld", v);
+    return !strcmp(ns, rep);
+}
+
 void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) {
     if (argc >= 2) {
         *n = strtol(argv[1], (char **)NULL, 10);
+        if (!isCorrect(*n, argv[1])) {
+            printf("threadsNumber must contain only digits and mustn't start with 0\n");
+            exit(LAB_BAD_ARGS);
+        }
 
         if (errno) {
             printError(errno, pthread_self(), "can't read number of threads");
+            exit(LAB_BAD_ARGS);
+        }
+
+        if (*n <= 0) {
+            printf("threads Number must be positive");
             exit(LAB_BAD_ARGS);
         }
 
@@ -144,6 +153,10 @@ void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) {
             *iterations = strtol(argv[2], (char **)NULL, 10);
             if (errno) {
                 printError(errno, pthread_self(), "can't read number of iterations");
+                exit(LAB_BAD_ARGS);
+            }
+            if (!isCorrect(*iterations, argv[2])) {
+                printf("iterationsNumber must contain only digits and mustn't start with 0\n");
                 exit(LAB_BAD_ARGS);
             }
         } else {
@@ -167,12 +180,14 @@ double runMultiThreadCalculations(long n, long iterations) {
     threadLabNode * problem = runThreads(threads, n);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "thread creation problem, calling exit");
+        free(threads);
         exit(LAB_CANT_CREATE_THREADS);
     } 
 
     problem = waitUntilAllThreadsFinish(threads, n);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "couldn't wait for this thread due to some error");
+        free(threads);
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
