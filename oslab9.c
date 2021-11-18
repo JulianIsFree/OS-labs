@@ -18,26 +18,18 @@
 #define LAB_BAD_ARGS 5
 #define LAB_BAD_ALLOC 6
 
-#define LAB_ITERATION_NUMBER 100000000
-
-#define LAB_DEBUG
-
-// typedef unsigned int pthread_t;
-// int pthread_create(pthread_t *thr, void * p,  void *(*start_routine)(void*), void * arg);\
-// int pthread_join(pthread_t thread, void **status);
-// void pthread_exit(void *value_ptr);
+#define  LAB_RANGE 10000
 
 typedef struct _threadRunParams {
-    unsigned long startIndex;
-    unsigned long count;
-    unsigned long totalThreads;
-    long iterationsNumber;
-    double result;
+    double start;
+    double range;
+    long totalThreads;
 } runParams;
 typedef struct _threadLabNode threadLabNode;
 struct _threadLabNode {
     runParams params;
-    pthread_t thread; 
+    pthread_t thread;
+    double result; 
     int status;
 };
 
@@ -45,6 +37,7 @@ threadLabNode constructNode(runParams p) {
     threadLabNode node;
     node.params = p;
     node.status = LAB_NO_ERROR;
+    node.result = 0;
     return node;    
 }
 
@@ -53,17 +46,15 @@ void printError(int code, pthread_t thread, char * what) {
 }
 
 double LeibnizPi(double i) {
-    double d;
-    modf(i, &d);
-    return (((long)d % 2 == 0) ? 1.0 : -1.0) / (2*i + 1.0);
+    double f = floor(i);
+    return pow(-1, f) / (2*i + 1.0);
 }
 
-
-/**
+static int doRun = 1;
+/*
  * this function should not be called from anywhere except signal handler
  * since it affects work of different threads
  */
-static int doRun = 1;
 void sigcatch(int sig) {
     doRun = 0;
 }
@@ -98,48 +89,39 @@ void * run(void * param) {
     
     threadLabNode * tn = (threadLabNode*)param;
     runParams p = tn->params;
-    
-    if (p.totalThreads == p.startIndex + 1) {
-        unblockSIGINT();
-    }
 
     double res = 0;
-    double x = p.startIndex;
-    
-    int doContinue = 1;
-    while (doRun) {
-        if (!doContinue) {
-            break;
-        }
-        for (long i = 0; i < p.iterationsNumber; ++i) {
-            res += LeibnizPi(x);
-            x += (double)p.count;
-        }
-    }    
+    long range = (long)p.range;
 #ifdef LAB_DEBUG
-    double numberOfIterations = ((x - p.startIndex) / p.count);
+    printf("range: %d\n", range);
+#endif
+    while (doRun) {
+        double x = p.start;
+        double subRes = 0;
+        for (long i = 0; i < range; ++i) {
+            subRes += LeibnizPi(x);
+            x++;
+        }
+        res += subRes;
+        p.start += p.range * p.totalThreads;
+    }
+#ifdef LAB_DEBUG
+    double numberOfIterations = p.start;
     printf("%d %.15g %.15g\n", pthread_self(), numberOfIterations,4 * res);
 #endif
-    tn->params.result = res;
+    tn->result = res;
     return param;
 }
 
 threadLabNode* runThreads(threadLabNode *list, long n) {    
-    // pthread_attr_t attr;
-    // pthread_attr_init(&attr);
-    // pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
-
     for (long i = 0; i < n; ++i) {
         threadLabNode *curr = &(list[i]);
         int code = pthread_create(&(curr->thread), NULL, run, curr);
+        
         curr->status = code;
-        if (code != LAB_NO_ERROR) {
-            // pthread_attr_destroy(&attr);
+        if (code != LAB_NO_ERROR) 
             return curr;
-        }
     }
-
-    // pthread_attr_destroy(&attr);
     return NULL;
 }
 
@@ -154,12 +136,8 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
             threadLabNode * ret = NULL;
             int code = pthread_join(curr->thread, (void**)(&ret));
             curr->status = code;
-
-            if (code == LAB_NO_ERROR) {
-                /*No errors, it's just fine as ESRCH*/
-            } else {
+            if (code != LAB_NO_ERROR)
                 return curr;
-            }
         } else {
             /*Means thread wasn't started or already was in this *good* branch*/
         }
@@ -170,54 +148,39 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
 
 double collectResults(threadLabNode *finishedThreads, long n) {
     double res = 0;
-
-    for (long i = 0; i < n; ++i) {
-        res += finishedThreads[i].params.result;
-    }
-
+    for (long i = 0; i < n; ++i) res += finishedThreads[i].result;
     return res;
 }
 
-void initThreads(threadLabNode *threads, long n, long iterations) {
+void initThreads(threadLabNode *threads, long n, double range) {
     for (long i = 0; i < n; ++i) {
-        runParams params = {(unsigned long)i, (unsigned long)n, n,iterations, 0.0};
+        runParams params = {range*i, range, n};
         threads[i] = constructNode(params);
     }
 }
 
-void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) {
-    if (argc >= 2) {
-        *n = strtol(argv[1], (char **)NULL, 10);
+void initAndMayBeDie(int argc, char *argv[], long *n) {
+    if (argc < 2) {
+        printf("args: threadsNumber\n");
+        exit(LAB_BAD_ARGS);
+    }
 
-        if (errno) {
-            printError(errno, pthread_self(), "can't read number of threads");
-            exit(LAB_BAD_ARGS);
-        }
+    *n = strtol(argv[1], (char **)NULL, 10);
 
-        if (argc >= 3) {
-            *iterations = strtol(argv[2], (char **)NULL, 10);
-        } else {
-            *iterations = LAB_ITERATION_NUMBER;
-        } 
-        
-        if (errno) {
-            printError(errno, pthread_self(), "can't read number of iterations");
-            exit(LAB_BAD_ARGS);
-        }
-    } else {
-        printf("args: threadsNumber [ iterationsNumber ]\n");
+    if (errno) {
+        printError(errno, pthread_self(), "can't read number of threads");
         exit(LAB_BAD_ARGS);
     }
 }
 
-double runMultiThreadCalculations(long n, long iterations) {
+double runMultiThreadCalculations(long n) {
     threadLabNode *threads = malloc(sizeof(threadLabNode) * n);
     if (threads == NULL) {
         printError(ENOMEM, pthread_self(), "threads number is too big");
         exit(LAB_CANT_CREATE_THREADS);
     }
     
-    initThreads(threads, n, iterations);
+    initThreads(threads, n, LAB_RANGE);
     
     threadLabNode * problem = runThreads(threads, n);
     if (problem != NULL) {
@@ -236,15 +199,13 @@ double runMultiThreadCalculations(long n, long iterations) {
 }
 
 int main(int argc, char *argv[]) {
-    blockSIGINT();
     setSigcatch();
     
     long n;
-    long iterations;
-    initAndMayBeDie(argc, argv, &n, &iterations);
+    initAndMayBeDie(argc, argv, &n);
     
-    double pi = runMultiThreadCalculations(n, iterations);    
-    printf("pi=%.15g\n", pi);
+    double pi = runMultiThreadCalculations(n);    
+    printf("pi=%.30g\n", pi);
 
     exit(LAB_NO_ERROR);
 }
