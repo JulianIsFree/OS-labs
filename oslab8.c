@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <limits.h>
 
 #define LAB_NO_ERROR 0
@@ -15,6 +16,7 @@
 #define LAB_BAD_ALLOC 6
 
 #define LAB_ITERATION_NUMBER 100000000
+#define LAB_MAX_THREADS_NUMBER 32
 
 // #define LAB_DEBUG
 
@@ -43,8 +45,9 @@ threadLabNode constructNode(runParams p) {
     return node;    
 }
 
-double LeibnizPi(unsigned long i) {
-    return ((i % 2 == 0) ? 1.0 : -1.0) / (2*(double)i + 1.0);
+double LeibnizPi(double i) {
+    double f = floor(i);
+    return pow(-1, f) / (2*i + 1.0);
 }
 
 void * run(void * param) {
@@ -55,7 +58,7 @@ void * run(void * param) {
     runParams p = tn->params;
     
     double res = 0;
-    unsigned long x = p.startIndex;
+    double x = p.startIndex;
     
     for (long i = 0; i < p.iterationsNumber; ++i) {
         res += LeibnizPi(x);
@@ -132,8 +135,13 @@ void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) { //simp
         exit(LAB_BAD_ARGS);
     }
     *n = strtol(argv[1], (char **)NULL, 10);
+    if ((*n) > LAB_MAX_THREADS_NUMBER) {
+        printf("Max threads number is: %d\n", LAB_MAX_THREADS_NUMBER);
+        exit(LAB_BAD_ARGS);
+    }
+
     if (isCorrect(*n, argv[1]) != 1) {
-        printf("threadsNumber must contain only digits and mustn't start with 0\n");
+        printf("threadsNumber may be contains not only digits\n");
         exit(LAB_BAD_ARGS);
     } else if (errno) {
         printError(errno, pthread_self(), "can't read number of threads");
@@ -147,7 +155,7 @@ void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) { //simp
         *iterations = LAB_ITERATION_NUMBER;
         return;
     }
-    *iterations = strtol(argv[2], (char **)NULL, 10);
+    *iterations = strtol(argv[2], (char**)NULL, 10);
     if (isCorrect(*iterations, argv[2]) != 1) {
         printf("iterationsNumber must contain only digits and mustn't start with 0\n");
         exit(LAB_BAD_ARGS);
@@ -158,33 +166,29 @@ void initAndMayBeDie(int argc, char *argv[], long *n, long *iterations) { //simp
         printError(errno, pthread_self(), "can't read number of iterations");
         exit(LAB_BAD_ARGS);
     }
+    // if (((*iterations) * (*n)) / (*n) != (*iterations)) {
+    //     printf("Summary number of sequence terms is too big (iterations * n)\n We recommend lower number of iterations\n");
+    //     exit(LAB_BAD_ARGS);
+    // }
 }
 
 double runMultiThreadCalculations(long n, long iterations) {
-    threadLabNode *threads = malloc(sizeof(threadLabNode) * n);
-    if (threads == NULL) {
-        printError(ENOMEM, pthread_self(), "threads number is too big");
-        exit(LAB_CANT_CREATE_THREADS);
-    }
-    
+    threadLabNode threads[n];
     initThreads(threads, n, iterations);
     
     threadLabNode * problem = runThreads(threads, n);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "thread creation problem, calling exit");
-        free(threads);
         exit(LAB_CANT_CREATE_THREADS);
     } 
 
     problem = waitUntilAllThreadsFinish(threads, n);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "couldn't wait for this thread due to some error");
-        free(threads);
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
     double pi = 4.0 * collectResults(threads, n);
-    free(threads);
     return pi;
 }
 
