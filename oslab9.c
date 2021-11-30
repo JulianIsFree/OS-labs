@@ -95,7 +95,7 @@ void * run(void * param) {
 #ifdef LAB_DEBUG
     printf("range: %d\n", range);
 #endif
-    while (doRun) {
+    do {
         double x = p.start;
         double subRes = 0;
         for (long i = 0; i < range; ++i) {
@@ -104,7 +104,7 @@ void * run(void * param) {
         }
         res += subRes;
         p.start += p.range * p.totalThreads;
-    }
+    } while (doRun);
 #ifdef LAB_DEBUG
     double numberOfIterations = p.start;
     printf("%d %.15g %.15g\n", pthread_self(), numberOfIterations,4 * res);

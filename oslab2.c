@@ -26,31 +26,10 @@ void print_error(int code, pthread_t thread, char * what) {
     fprintf(stderr, "Error: %lu %s: %s\n", thread, what, strerror(code));
 }
 
-// ? handling
-// ? join to detached
-// ? multi join
-// ? what is zombie and what stored
-/*
-What is freed:
-    in structure ulwp_t for this thread there is a uberdata structure, in which there are several things:
-        tmem list
-        thread specific data list 
-        thread local storage 
-        heldlock list
-        :: all of these are deallocated (except heldlock list, for they owner is set as LOCK_OWNERDEAD)
-    ulwp_t->ul_readlock.array is freed with lfree (rwl_free(ulwp_t*));
-    ulwp_t structure after this is moved either in free stack list or free ulwp_t list (ulwp_free(ulwp_t*) function)
-
-Zombie thread is a thread which already called pthread_exit but which rval were not gained by any other thread
-Trying to join to detached will result in EINVAL
-Multi join will result in situation, where one thread obtains result, and others receives ESRCH
-*/
-
 int main(int argc, char *argv[]) {
     pthread_t thread;
     pthread_attr_t attr;
 
-    // read oslab1.c for comments
     int code = pthread_attr_init(&attr);
     if (code == ENOMEM) {
         fprintf(stderr, "Can't initialise attributes");
@@ -65,8 +44,6 @@ int main(int argc, char *argv[]) {
     }
 
     int *status;
-    // https://illumos.org/man/3C/pthread_join usr/src/lib/libc/port/threads/thr.c
-    // https://illumos.org/man/3C/pthread_detach usr/src/lib/libc/port/threads/thr.c
     code = pthread_join(thread, (void**)(&status));
     if (code == EINVAL) {
         print_error(code, thread, "target thread is detached");
