@@ -136,9 +136,7 @@ threadLabNode* runThreads(threadLabNode *list, long n) {
         threadLabNode *curr = &(list[i]);
         int code = pthread_create(&(curr->thread), NULL, run, curr);
         curr->status = code;
-        
-        if (code != LAB_NO_ERROR)  
-            return curr;
+        if (code != LAB_NO_ERROR)  return curr;
     }
 
     return NULL;
@@ -151,16 +149,12 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
     for (long i = 0; i < n; ++i) {
         threadLabNode *curr = &(runningJoinableThreads[i]);
         int status = curr->status;
-        
-        if (status != LAB_NO_ERROR)
-            continue;
+        if (status != LAB_NO_ERROR) continue; // wait only for threads who started without problem
 
         threadLabNode * ret = NULL;
         int code = pthread_join(curr->thread, (void**)(&ret));
-        
         curr->status = code;
-        if (code != LAB_NO_ERROR)
-            return curr;
+        if (code != LAB_NO_ERROR) return curr;
     }
 
     return NULL;
@@ -201,7 +195,6 @@ errorIndexPair initMutexes(pthread_mutex_t *mutexes, long n) {
 threadLabNode *checkResults(threadLabNode *threads, long n) {
     for (long i = 0; i < n; ++i) {
         int status = threads[i].status;
-        int section = threads[i].section;
         if (status != LAB_NO_ERROR) return &threads[i];
     }
 
@@ -277,7 +270,7 @@ long getIterationsNumber(int argc, char **argv) {
 
     long iterations = strtol(argv[1], (char**)NULL, 10);
     if (isCorrect(iterations, argv[1]) != 1) {
-        printf("iterationsNumber must contain only digits and mustn't start with 0\n");
+        printf("bad input: too long or start with 0\n");
         exit(LAB_BAD_ARGS);
     } else if (iterations <= 0) {
         printf("iterationsNumber must be positive\n");
