@@ -228,9 +228,8 @@ void runChildrenThreads(long iterations) {
     
     errorIndexPair result = initMutexes(mutexes, LAB_MUTEX_NUMBER);
     if (result.status != LAB_NO_ERROR) {
-        if (result.i == 0) printError(result.status, pthread_self(), "can't init mutex attributes");
-        else                     printError(result.status, pthread_self(), "can't init mutexes"); 
-        if (deinitMutexes(mutexes, result.i) != LAB_NO_ERROR) exit(LAB_FATAL);
+        printError(result.status, pthread_self(), result.i == 0 ? "can't init mutex attributes" :  "can't init mutexes"); 
+        deinitMutexes(mutexes, result.i);
         exit(LAB_CANT_INIT_MUTEX);
     }
 
@@ -238,25 +237,26 @@ void runChildrenThreads(long iterations) {
     threadLabNode * problem = runThreads(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "thread creation problem, calling exit");
-        if (deinitMutexes(mutexes, LAB_MUTEX_NUMBER) != LAB_NO_ERROR) exit(LAB_FATAL);
+        deinitMutexes(mutexes, result.i);
         exit(LAB_CANT_CREATE_THREADS);
     } 
 
     problem = waitUntilAllThreadsFinish(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "couldn't wait for this thread due to some error");
-        if (deinitMutexes(mutexes, LAB_MUTEX_NUMBER) != LAB_NO_ERROR) exit(LAB_FATAL);
+        deinitMutexes(mutexes, result.i);
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
     problem = checkResults(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
         describeSectionAndError(problem->section, problem->status, problem->thread);
-        if (deinitMutexes(mutexes, LAB_MUTEX_NUMBER) != LAB_NO_ERROR) exit(LAB_FATAL);
+        deinitMutexes(mutexes, result.i);
         exit(LAB_BAD);
     }
 
-    if (deinitMutexes(mutexes, LAB_MUTEX_NUMBER) != LAB_NO_ERROR) exit(LAB_FATAL);
+    if (deinitMutexes(mutexes, LAB_MUTEX_NUMBER) != LAB_NO_ERROR) 
+        exit(LAB_FATAL);
 }
 
 int isCorrect(long v, char * rep) {
