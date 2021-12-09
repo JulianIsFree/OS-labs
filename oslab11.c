@@ -270,10 +270,10 @@ long getIterationsNumber(int argc, char **argv) {
 
     long iterations = strtol(argv[1], (char**)NULL, 10);
     if (isCorrect(iterations, argv[1]) != 1) {
-        printf("bad input: too long or start with 0\n");
+        fprintf(stderr, "bad input: too long or start with 0\n");
         exit(LAB_BAD_ARGS);
     } else if (iterations <= 0) {
-        printf("iterationsNumber must be positive\n");
+        fprintf(stderr,"iterationsNumber must be positive\n");
         exit(LAB_BAD_ARGS);
     } else if (errno) {
         printError(errno, pthread_self(), "can't read number of iterations");
