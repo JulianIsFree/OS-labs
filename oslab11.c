@@ -232,7 +232,7 @@ void runChildrenThreads(long iterations) {
     if (result.status != LAB_NO_ERROR) {
         printError(result.status, pthread_self(), result.i == 0 ? "can't init mutex attributes" :  "can't init mutexes"); 
         deinitMutexes(mutexes, result.i);
-        exit(LAB_CANT_INIT_SEMAPHORE);
+        exit(LAB_CANT_INIT_MUTEX);
     }
 
     initThreads(mutexes, threads, LAB_THREADS_NUMBER, iterations);
