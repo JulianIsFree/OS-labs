@@ -77,14 +77,14 @@ void * run(void * param) {
     char * str = p.str;
 
     sem_t *semaphoreFirst = &(sems[id]);
-    sem_t *semaphoreSecond = &(sems[(id + 1) % 2]);
+    sem_t *semaphoreSecond = &(sems[(id + 1) % LAB_THREADS_NUMBER]);
 
     for (int i = 0; i < p.iterations; ++i) {
         int status = sem_wait(semaphoreSecond);
-        if (setStatusIfAnyError(status, LAB_WAIT, t)) return param;
+        if (setStatusIfAnyError(errno, LAB_WAIT, t)) return param;
         printf("%d %s\n", i, str);
         status = sem_post(semaphoreFirst);
-        if (setStatusIfAnyError(status, LAB_POST, t)) return param;
+        if (setStatusIfAnyError(errno, LAB_POST, t)) return param;
     }
 
     return param;
