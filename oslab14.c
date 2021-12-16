@@ -28,7 +28,6 @@
 
 typedef struct _threadRunParams {
     long i;
-    long n;
     long iterations;
     sem_t *sems;
     char *str;
@@ -74,15 +73,14 @@ void * run(void * param) {
     runParams p = t->params;
 
     sem_t  *sems = p.sems;
-    int currentMutex = 1;
     long id = p.i;
     char * str = p.str;
 
-    int status = LAB_NO_ERROR;
     sem_t *semaphoreFirst = &(sems[id]);
     sem_t *semaphoreSecond = &(sems[(id + 1) % 2]);
+
     for (int i = 0; i < p.iterations; ++i) {
-        status = sem_wait(semaphoreSecond);
+        int status = sem_wait(semaphoreSecond);
         if (setStatusIfAnyError(status, LAB_WAIT, t)) return param;
         printf("%d %s\n", i, str);
         status = sem_post(semaphoreFirst);
@@ -123,7 +121,7 @@ threadLabNode* waitUntilAllThreadsFinish(threadLabNode *runningJoinableThreads, 
 
 void initThreads(sem_t  *sems, threadLabNode *threads, long n, long iterations) {
     for (long i = 0; i < n; ++i) {
-        runParams params = {i, n, iterations, sems, strerror(i % LAB_THREADS_NUMBER)};
+        runParams params = {i, iterations, sems, strerror(i % LAB_THREADS_NUMBER)};
         threads[i] = constructNode(params);
     }
 }
