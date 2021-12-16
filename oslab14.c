@@ -23,11 +23,8 @@
 #define LAB_ITERATION_NUMBER 10
 #define LAB_DIFFERENT_STRINGS_NUMBER 16
 
-#define LAB_STATE_READY 0
-#define LAB_STATE_IMMEDIATE 1
-#define LAB_STATE_PRINT 2
-
-#define LAB_END_SECTION 0
+#define LAB_WAIT 0
+#define LAB_POST 1
 
 typedef struct _threadRunParams {
     long i;
@@ -82,8 +79,16 @@ void * run(void * param) {
     char * str = p.str;
 
     int status = LAB_NO_ERROR;
+    sem_t *semaphoreFirst = &(sems[id]);
+    sem_t *semaphoreSecond = &(sems[(id + 1) % 2]);
+    for (int i = 0; i < p.iterations; ++i) {
+        status = sem_wait(semaphoreSecond);
+        if (setStatusIfAnyError(status, LAB_WAIT, t)) return param;
+        printf("%d %s\n", i, str);
+        status = sem_post(semaphoreFirst);
+        if (setStatusIfAnyError(status, LAB_POST, t)) return param;
+    }
 
-    (void) setStatusIfAnyError(status, LAB_END_SECTION, t);
     return param;
 }
 
@@ -132,27 +137,56 @@ threadLabNode *checkResults(threadLabNode *threads, long n) {
     return NULL;
 }
 
-errorIndexPair initSemaphores(sem_t sems[2],) {
-    int status = sem_init(&(sems[0]), 0);
-    if (status != LAB_NO_ERROR) return (errorIndexPair){LAB_CANT_INIT_SEMAPHORE, 0};
-    status = sem_init(&(sems[1]), 1);
-    if (status != LAB_NO_ERROR) return (errorIndexPair){LAB_CANT_INIT_SEMAPHORE, 1};
-    return (errorIndexPair){0, NULL};
+errorIndexPair initSemaphores(sem_t sems[LAB_THREADS_NUMBER]) {
+    for (int i = 0; i < LAB_THREADS_NUMBER; ++i) {
+        int status = sem_init(&(sems[i]), 0, i);
+        if (status != LAB_NO_ERROR) return (errorIndexPair){LAB_CANT_INIT_SEMAPHORE, i};
+    }
+    return (errorIndexPair){0, 0};
+}
+
+int destroySemaphores(sem_t sems[LAB_THREADS_NUMBER]) {
+    for (int i = 0; i < LAB_THREADS_NUMBER; ++i) {
+        int status = sem_destroy(sems + i);
+        if (status != LAB_NO_ERROR) {
+            printError(status, pthread_self(), "can't destroy semaphore, fatal error");
+            return LAB_FATAL;
+        }
+    }
+
+    return LAB_NO_ERROR;
+}
+
+void describeSectionAndError(int section, int status, pthread_t thread) {
+    switch (section)
+    {
+    case LAB_WAIT:
+        printError(status, thread, "problem in waiting");
+        break;
+    case LAB_POST:
+        printError(status, thread, "problem in posting");
+        break;
+    default:
+        printf("shouldn't reach there\n");
+        exit(LAB_FATAL);
+    }
 }
 
 void runChildrenThreads(long iterations) {
     sem_t sems[LAB_THREADS_NUMBER];
     threadLabNode threads[LAB_THREADS_NUMBER];
     
-    errorIndexPair result = initSemaphores(sems, LAB_THREADS_NUMBER);
+    errorIndexPair result = initSemaphores(sems);
     if (result.status != LAB_NO_ERROR) {
         printError(result.status, pthread_self(), result.i == 0 ? "can't init semaphore attributes" :  "can't init semaphore"); 
+        if (destroySemaphores(sems) != LAB_NO_ERROR) exit(LAB_FATAL);
         exit(LAB_CANT_INIT_SEMAPHORE);
     }
 
     initThreads(sems, threads, LAB_THREADS_NUMBER, iterations);
     threadLabNode * problem = runThreads(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
+        if (destroySemaphores(sems) != LAB_NO_ERROR) exit(LAB_FATAL);
         printError(problem->status, problem->thread, "thread creation problem, calling exit");
         exit(LAB_CANT_CREATE_THREADS);
     } 
@@ -160,14 +194,18 @@ void runChildrenThreads(long iterations) {
     problem = waitUntilAllThreadsFinish(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
         printError(problem->status, problem->thread, "couldn't wait for this thread due to some error");
+        if (destroySemaphores(sems) != LAB_NO_ERROR) exit(LAB_FATAL);
         exit(LAB_CANT_WAIT_FOR_THREADS);
     }
 
     problem = checkResults(threads, LAB_THREADS_NUMBER);
     if (problem != NULL) {
         describeSectionAndError(problem->section, problem->status, problem->thread);
+        if (destroySemaphores(sems) != LAB_NO_ERROR) exit(LAB_FATAL);
         exit(LAB_BAD);
     }
+
+    if (destroySemaphores(sems) != LAB_NO_ERROR) exit(LAB_FATAL); 
 }
 
 int isCorrect(long v, char * rep) {
